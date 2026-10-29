@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Find Local Vendors{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Find street vendors near you</h1>
+  <p>Browse today's prices, call or WhatsApp the vendor, and pay instantly with UPI.</p>
+</section>
+
+<form method="get" action="{{ url_for('index') }}" class="filters card">
+  <div class="field">
+    <label for="area">Area</label>
+    <select id="area" name="area" onchange="this.form.submit()">
+      <option value="">All Areas</option>
+      {% for a in areas %}
+        <option value="{{ a }}" {{ 'selected' if a == sel_area }}>{{ a }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="category">Category</label>
+    <select id="category" name="category" onchange="this.form.submit()">
+      <option value="">All Categories</option>
+      {% for c in categories %}
+        <option value="{{ c }}" {{ 'selected' if c == sel_category }}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <noscript><button class="btn" type="submit">Filter</button></noscript>
+  {% if sel_area or sel_category %}
+    <a class="btn btn-outline" href="{{ url_for('index') }}">Clear</a>
+  {% endif %}
+</form>
+
+{% if vendors %}
+  <p style="margin-bottom:0.8rem;color:var(--muted);font-weight:600;">
+    {{ vendors|length }} vendor{{ '' if vendors|length == 1 else 's' }} found
+  </p>
+  <div class="grid grid-3">
+    {% for v in vendors %}
+      {% set info = v['info'] %}
+      <article class="card vendor-card">
+        <div class="vendor-head">
+          <div>
+            <h3>{{ info['shop_name'] }}</h3>
+            <div class="vendor-owner">{{ info['owner_name'] }}</div>
+          </div>
+          <span class="badge">{{ info['category'] }}</span>
+        </div>
+        <div><span class="badge badge-area">{{ info['area'] }}</span></div>
+
+        {% if v['items'] %}
+          <ul class="item-list">
+            {% for it in v['items'] %}
+              <li><span>{{ it['name'] }}</span><span class="price">&#8377;{{ '%g'|format(it['price']) }}</span></li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="empty">No items listed yet.</p>
+        {% endif %}
+
+        <details class="pay">
+          <summary>Pay with UPI (show QR)</summary>
+          <div class="qr-box">
+            <img loading="lazy" src="{{ url_for('qr', vid=info['id']) }}" alt="UPI QR for {{ info['shop_name'] }}">
+            <div class="vendor-owner">{{ info['upi_id'] }}</div>
+          </div>
+        </details>
+
+        <div class="card-actions">
+          <a class="btn" href="tel:+91{{ info['phone'][-10:] }}">Call</a>
+          <a class="btn btn-whatsapp" target="_blank" rel="noopener"
+             href="https://wa.me/{{ info['phone']|wa_number }}?text=Hi%2C%20is%20{{ info['shop_name']|urlencode }}%20available%20now%3F">WhatsApp Chat</a>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card empty">No vendors match these filters. Try a different area or category.</div>
+{% endif %}
+{% endblock %}

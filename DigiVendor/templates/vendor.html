@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Vendor Login{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Vendor Corner</h1>
+  <p>Log in to manage your items, record sales in your Digital Khata, and show your UPI QR.</p>
+</section>
+
+<div class="grid grid-2">
+  <section class="card">
+    <h2>Login to my shop</h2>
+    <form method="post" action="{{ url_for('vendor_login') }}">
+      <div class="form-row">
+        <label for="vendor_id">Select your shop</label>
+        <select id="vendor_id" name="vendor_id" required>
+          <option value="" disabled selected>-- Choose your shop --</option>
+          {% for v in vendors %}
+            <option value="{{ v['id'] }}">{{ v['shop_name'] }} ({{ v['owner_name'] }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-block" type="submit">Open Dashboard</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Register a new shop</h2>
+    <form method="post" action="{{ url_for('vendor_register') }}">
+      <div class="form-row">
+        <label for="shop_name">Shop name</label>
+        <input id="shop_name" name="shop_name" maxlength="80" required placeholder="e.g. Raju Fruit Stall">
+      </div>
+      <div class="form-row">
+        <label for="owner_name">Owner name</label>
+        <input id="owner_name" name="owner_name" maxlength="80" required placeholder="e.g. Raju Sharma">
+      </div>
+      <div class="form-row">
+        <label for="phone">Phone number</label>
+        <input id="phone" name="phone" type="tel" inputmode="numeric" pattern="[0-9+ ]{10,14}" required placeholder="10-digit mobile number">
+      </div>
+      <div class="form-row">
+        <label for="area">Area</label>
+        <select id="area" name="area" required>
+          {% for a in areas %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="category">Category</label>
+        <select id="category" name="category" required>
+          {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="upi_id">UPI ID</label>
+        <input id="upi_id" name="upi_id" required placeholder="e.g. raju@upi">
+      </div>
+      <button class="btn btn-block" type="submit">Register &amp; Go to Dashboard</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

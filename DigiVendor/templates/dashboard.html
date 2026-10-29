@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}{{ vendor['shop_name'] }} Dashboard{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <h1>{{ vendor['shop_name'] }}</h1>
+    <span class="badge badge-area">{{ vendor['area'] }}</span>
+    <span class="badge">{{ vendor['category'] }}</span>
+  </div>
+  <a class="btn btn-outline btn-small" href="{{ url_for('logout') }}">Logout</a>
+</div>
+
+<!-- Stats -->
+<div class="grid grid-stats">
+  <div class="stat">
+    <div class="label">Today's Sales</div>
+    <div class="value" id="stat-today">&#8377;{{ '%.2f'|format(stats.today_sales) }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Total Sales</div>
+    <div class="value" id="stat-total">&#8377;{{ '%.2f'|format(stats.total_sales) }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Digital Share (UPI)</div>
+    <div class="value" id="stat-share">{{ stats.digital_share }}%</div>
+    <div class="progress"><div id="stat-bar" style="width: {{ stats.digital_share }}%"></div></div>
+  </div>
+</div>
+
+<div class="grid grid-2">
+  <!-- Inventory -->
+  <section class="card">
+    <h2>My Items</h2>
+    <form id="item-form" class="inline-form" style="margin-bottom:0.8rem;">
+      <div class="field" style="flex:2 1 160px;">
+        <label for="item-name">Item name</label>
+        <input id="item-name" maxlength="80" required placeholder="e.g. Tomato (1 kg)">
+      </div>
+      <div class="field">
+        <label for="item-price">Price (&#8377;)</label>
+        <input id="item-price" type="number" min="0.01" step="0.01" inputmode="decimal" required placeholder="40">
+      </div>
+      <button class="btn" type="submit">Add</button>
+    </form>
+    <ul class="item-list" id="item-list">
+      {% for it in items %}
+        <li data-id="{{ it['id'] }}">
+          <span>{{ it['name'] }}</span>
+          <span class="del-cell">
+            <span class="price">&#8377;{{ '%g'|format(it['price']) }}</span>
+            <button class="btn btn-danger" type="button" data-delete="{{ it['id'] }}">Delete</button>
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+    <p class="empty" id="items-empty" {% if items %}style="display:none"{% endif %}>No items yet. Add your first item above.</p>
+  </section>
+
+  <!-- QR -->
+  <section class="card qr-panel">
+    <h2>My UPI QR Code</h2>
+    <p style="color:var(--muted);font-size:0.9rem;">Show this to customers so they can pay you directly.</p>
+    <img id="qr-img" src="{{ url_for('qr', vid=vendor['id']) }}" alt="UPI QR code">
+    <div class="upi-id">{{ vendor['upi_id'] }}</div>
+    <div class="form-row" style="margin-top:0.8rem;text-align:left;">
+      <label for="qr-amount">Fixed amount (optional)</label>
+      <div class="inline-form">
+        <div class="field"><input id="qr-amount" type="number" min="1" step="0.01" inputmode="decimal" placeholder="e.g. 150"></div>
+        <button class="btn btn-outline" type="button" id="qr-update">Update QR</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- Digital Khata -->
+<section class="card" style="margin-top:1rem;">
+  <h2>Digital Khata (Sales Ledger)</h2>
+  <form id="sale-form" class="inline-form" style="margin-bottom:1rem;">
+    <div class="field">
+      <label for="sale-amount">Amount (&#8377;)</label>
+      <input id="sale-amount" type="number" min="0.01" step="0.01" inputmode="decimal" required placeholder="100">
+    </div>
+    <div class="field">
+      <label for="sale-mode">Payment mode</label>
+      <select id="sale-mode">
+        <option value="Cash">Cash</option>
+        <option value="Digital">Digital (UPI)</option>
+      </select>
+    </div>
+    <button class="btn" type="submit">Record Sale</button>
+  </form>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Date &amp; Time</th><th>Amount</th><th>Mode</th></tr></thead>
+      <tbody id="sales-body">
+        {% for s in sales %}
+          <tr>
+            <td>{{ s['sale_date'] }}</td>
+            <td>&#8377;{{ '%.2f'|format(s['amount']) }}</td>
+            <td class="{{ 'mode-digital' if s['mode'] == 'Digital' else 'mode-cash' }}">{{ s['mode'] }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="empty" id="sales-empty" {% if sales %}style="display:none"{% endif %}>No sales recorded yet.</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var VENDOR_ID = {{ vendor['id'] }};
+
+  function fmtMoney(n) { return '\u20B9' + Number(n).toFixed(2); }
+  function fmtPrice(n) { return '\u20B9' + parseFloat(Number(n).toFixed(2)); }
+
+  async function api(url, method, body) {
+    var opts = { method: method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    var res = await fetch(url, opts);
+    var data = await res.json().catch(function () { return {}; });
+    if (res.status === 401) { window.location.href = '/vendor'; throw new Error('Please log in again.'); }
+    if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+    return data;
+  }
+
+  /* ---------- Items ---------- */
+  var itemList = document.getElementById('item-list');
+  var itemsEmpty = document.getElementById('items-empty');
+
+  function addItemRow(item) {
+    var li = document.createElement('li');
+    li.dataset.id = item.id;
+    var name = document.createElement('span');
+    name.textContent = item.name;
+    var cell = document.createElement('span');
+    cell.className = 'del-cell';
+    var price = document.createElement('span');
+    price.className = 'price';
+    price.textContent = fmtPrice(item.price);
+    var del = document.createElement('button');
+    del.className = 'btn btn-danger';
+    del.type = 'button';
+    del.setAttribute('data-delete', item.id);
+    del.textContent = 'Delete';
+    cell.appendChild(price);
+    cell.appendChild(del);
+    li.appendChild(name);
+    li.appendChild(cell);
+    itemList.insertBefore(li, itemList.firstChild);
+    itemsEmpty.style.display = 'none';
+  }
+
+  document.getElementById('item-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var nameEl = document.getElementById('item-name');
+    var priceEl = document.getElementById('item-price');
+    var btn = e.target.querySelector('button');
+    btn.disabled = true;
+    try {
+      var data = await api('/api/items', 'POST', { name: nameEl.value, price: priceEl.value });
+      addItemRow(data.item);
+      nameEl.value = ''; priceEl.value = ''; nameEl.focus();
+      showToast('Item added');
+    } catch (err) { showToast(err.message, true); }
+    btn.disabled = false;
+  });
+
+  itemList.addEventListener('click', async function (e) {
+    var btn = e.target.closest('[data-delete]');
+    if (!btn) return;
+    if (!confirm('Delete this item?')) return;
+    btn.disabled = true;
+    try {
+      await api('/api/items/' + btn.getAttribute('data-delete'), 'DELETE');
+      btn.closest('li').remove();
+      if (!itemList.children.length) itemsEmpty.style.display = '';
+      showToast('Item deleted');
+    } catch (err) { showToast(err.message, true); btn.disabled = false; }
+  });
+
+  /* ---------- Sales / Khata ---------- */
+  var salesBody = document.getElementById('sales-body');
+  var salesEmpty = document.getElementById('sales-empty');
+
+  function updateStats(s) {
+    document.getElementById('stat-today').textContent = fmtMoney(s.today_sales);
+    document.getElementById('stat-total').textContent = fmtMoney(s.total_sales);
+    document.getElementById('stat-share').textContent = s.digital_share + '%';
+    document.getElementById('stat-bar').style.width = s.digital_share + '%';
+  }
+
+  function addSaleRow(sale) {
+    var tr = document.createElement('tr');
+    var td1 = document.createElement('td'); td1.textContent = sale.sale_date;
+    var td2 = document.createElement('td'); td2.textContent = fmtMoney(sale.amount);
+    var td3 = document.createElement('td');
+    td3.textContent = sale.mode;
+    td3.className = sale.mode === 'Digital' ? 'mode-digital' : 'mode-cash';
+    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+    salesBody.insertBefore(tr, salesBody.firstChild);
+    salesEmpty.style.display = 'none';
+  }
+
+  document.getElementById('sale-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var amountEl = document.getElementById('sale-amount');
+    var modeEl = document.getElementById('sale-mode');
+    var btn = e.target.querySelector('button');
+    btn.disabled = true;
+    try {
+      var data = await api('/api/sales', 'POST', { amount: amountEl.value, mode: modeEl.value });
+      addSaleRow(data.sale);
+      updateStats(data.stats);
+      amountEl.value = ''; amountEl.focus();
+      showToast('Sale recorded');
+    } catch (err) { showToast(err.message, true); }
+    btn.disabled = false;
+  });
+
+  /* ---------- QR refresh (optional fixed amount) ---------- */
+  document.getElementById('qr-update').addEventListener('click', function () {
+    var amt = document.getElementById('qr-amount').value;
+    var url = '/qr/' + VENDOR_ID + (amt ? '?amt=' + encodeURIComponent(amt) : '') +
+              (amt ? '&' : '?') + 't=' + Date.now();
+    document.getElementById('qr-img').src = url;
+    showToast(amt ? 'QR updated with amount' : 'QR reset');
+  });
+})();
+</script>
+{% endblock %}
